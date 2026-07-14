@@ -1,5 +1,4 @@
 // server/auth.js
-// server/auth.js
 // HTTP Basic Auth — the browser shows a native password prompt.
 // The user types the password (from .env) into the prompt; we verify the
 // password portion of the decoded Authorization header against process.env.PASSWORD
@@ -89,13 +88,30 @@ function buildAuthMiddleware({ publicPaths = new Set() } = {}) {
     // fills in "letmein" by default, so this is only true in tests.
     if (!process.env.PASSWORD) return next();
 
+    // Special endpoint to silently clear the browser's Basic Auth cache
+    // by returning a 401 without the WWW-Authenticate prompt header.
+    if (url === "/api/clear-basic-auth") {
+      res.writeHead(401, {});
+      res.end();
+      return;
+    }
+
     let creds = parseBasicAuth(req.headers.authorization);
+    let fromCookie = false;
+
     if (!creds) {
       creds = parseAuthCookie(req.headers.cookie);
+      fromCookie = !!creds;
     }
-    
+
     if (creds && checkPassword(creds.pass)) {
       req.user = { name: creds.user || "user" };
+
+      // If authenticated via Basic Auth header, set the cookie so future requests can use it.
+      if (!fromCookie && req.headers.authorization) {
+        const cookieVal = Buffer.from(`${creds.user || 'user'}:${creds.pass}`).toString('base64');
+        res.setHeader('Set-Cookie', `auth=${cookieVal}; Path=/; HttpOnly; SameSite=Lax; Max-Age=31536000`);
+      }
       return next();
     }
 
