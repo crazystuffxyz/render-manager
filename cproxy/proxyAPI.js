@@ -38,7 +38,7 @@ export {
 async function proxyUrl(req, res, url) {
   try {
     console.log(url, adblock.isAllowed(url));
-    if(!adblock.isAllowed(url)) return res.status(404).send();
+    if(!adblock.isAllowed(url)) return res.status(403).send("Blocked by Adblock");
     if (url.startsWith(`${req.protocol}://${req.get("host")}/check?url=`)) {
       return res.redirect(url);
     }
