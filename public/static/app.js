@@ -1,5 +1,4 @@
 // public/static/app.js
-// public/static/app.js
 // Dashboard logic. Talks to /api/* and /ws/term. Renders xterm.js for shells.
 // Auth: HTTP Basic Auth. Browser caches the credential after the first
 // successful prompt, so all fetches re-send it automatically. WebSocket
@@ -69,6 +68,13 @@ document.addEventListener("DOMContentLoaded", async () => {
 });
 
 async function bootstrap(status) {
+  // Clear Basic Auth cache from the browser now that we have the auth cookie.
+  // This cleanly forces the browser to forget the credentials and rely on the cookie,
+  // preventing accidental Authorization header leakage on proxy requests.
+  fetch(api("/api/clear-basic-auth"), {
+    headers: { 'Authorization': 'Basic bG9nb3V0Og==' } // 'logout:' base64 encoded
+  }).catch(()=>{});
+
   renderHeader(status);
   bindTabs();
 
@@ -416,12 +422,31 @@ function bindProxyForm() {
     e.preventDefault();
     const v = $("#proxyInput").value.trim();
     if (!v) return;
-    let url = v;
-    if (!/^https?:\/\//.test(url)) url = "https://" + url;
-    const u = new URL(url);
+
+    // Register Service Worker and set Proxy Cookie before navigation
+    document.cookie = "shouldProxy=true; path=/; max-age=3600; samesite=lax";
+    try {
+      await navigator.serviceWorker.register("/croxy.sw.js", { scope: "/" });
+    } catch (err) {
+      console.warn("SW register failed:", err);
+    }
+
+    const urlRegex = /^(https?:\/\/(?:www\.|(?!www))[a-zA-Z0-9][a-zA-Z0-9-]+[a-zA-Z0-9]\.[^\s]{2,}|www\.[a-zA-Z0-9][a-zA-Z0-9-]+[a-zA-Z0-9]\.[^\s]{2,}|https?:\/\/[a-zA-Z0-9]+\.[^\s]{2,}|[a-zA-Z0-9]+\.[^\s]{2,})$/i;
+    let finalUrl = v;
+
+    if (urlRegex.test(v)) {
+        if (!v.startsWith('http://') && !v.startsWith('https://')) {
+            finalUrl = `https://${v}`;
+        }
+    } else {
+        finalUrl = `https://duckduckgo.com/?q=${encodeURIComponent(v)}`;
+    }
+
+    const u = new URL(finalUrl);
     const origin = u.origin;
-    const encoded = btoa(origin);
+    const encoded = btoa(origin).replace(/=+$/, '');
     const proxied = u.pathname + u.search + (u.search ? "&" : "?") + "__cpo=" + encodeURIComponent(encoded);
+    
     $("#proxyFrame").src = proxied;
   });
 }
