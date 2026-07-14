@@ -1,4 +1,5 @@
 // server/terminal.js
+// server/terminal.js
 // Multi-shell PTY manager. node-pty per shell, full xterm-256 color,
 // proper Ctrl-C/SIGINT/SIGTERM semantics, persists across reconnects
 // by shell id so a Ctrl-R reattaches the same PTY.
@@ -73,18 +74,38 @@ function createShell({ label, cols = DEFAULT_COLS, rows = DEFAULT_ROWS, cwd } = 
     useConpty: process.platform === "win32",
   });
 
-  const entry = { id, proc, shellPath, cols, rows, label: label || deriveLabel(shellPath), createdAt: Date.now(), killed: false, clients: new Set(), dataDisposable: null, exitDisposable: null };
+  const entry = { 
+    id, 
+    proc, 
+    shellPath, 
+    cols, 
+    rows, 
+    label: label || deriveLabel(shellPath), 
+    createdAt: Date.now(), 
+    killed: false, 
+    clients: new Set(), 
+    dataDisposable: null, 
+    exitDisposable: null,
+    history: ""
+  };
+  
   shells.set(id, entry);
   try { portWatcher.recordShellPid(id, proc.pid); } catch {}
+  
   // one onData + one onExit per shell, both fan out / clean up. registering
   // these per-WS leaks listeners and makes multiple tabs race on cleanup.
   // node-pty's onData + onExit both return disposables; we hold both so the
   // onExit handler can detach them before deleting the entry.
   const onData = (data) => {
+    entry.history += data;
+    if (entry.history.length > 100000) {
+      entry.history = entry.history.slice(-100000);
+    }
     for (const c of entry.clients) {
       try { c.send(data); } catch {}
     }
   };
+  
   entry.dataDisposable = proc.onData(onData);
   entry.exitDisposable = proc.onExit(({ exitCode, signal }) => {
     for (const c of entry.clients) {
@@ -272,16 +293,26 @@ function buildWss({ server, authCheck }) {
       socket.destroy();
       return;
     }
+    
     let id = m[1] || null;
+    let s;
     if (!id) {
-      const s = createShell({});
+      s = createShell({});
       id = s.id;
+    } else {
+      s = shells.get(id);
     }
+    
     try {
       wss.handleUpgrade(req, socket, head, (ws) => {
         try {
-          ws.send(JSON.stringify({ type: "hello", id, platform: process.platform }));
+          ws.send(JSON.stringify({ type: "hello", id, platform: process.platform, pid: s ? s.proc.pid : null }));
         } catch {}
+        
+        if (s && s.history) {
+          try { ws.send(s.history); } catch {}
+        }
+        
         attachWebSocket(ws, id);
       });
     } catch (e) {
