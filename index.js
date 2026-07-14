@@ -59,16 +59,21 @@ function isSidecarPath(req) {
   const pathOnly = urlObj.pathname;
   const cpo = urlObj.searchParams.get("__cpo");
 
+  // Always allow sidecar files so SW can register and scripts can load
   if (SIDECAR_FILES.has(pathOnly)) return true;
-  if (cpo === "1") return false;
-  if (cpo) return true;
 
   const cookies = req.headers.cookie || "";
-  if (cookies.includes("shouldProxy=true") && cookies.includes("previousOrigin=")) {
-    return true;
-  }
-  
-  return false;
+  const hasShouldProxy = cookies.includes("shouldProxy=true");
+  const hasPreviousOrigin = cookies.includes("previousOrigin=");
+  const hasCpoParam = cpo !== null;
+
+  // Ask for auth if:
+  // 1. no shouldProxy cookie exists
+  // 2. cpo is 1 (dashboard bypass)
+  // 3. no previousOrigin cookie exists AND cpo isn't a parameter in the URL
+  const askForAuth = !hasShouldProxy || cpo === "1" || (!hasPreviousOrigin && !hasCpoParam);
+
+  return !askForAuth;
 }
 
 const server = http.createServer((req, res) => {
@@ -473,7 +478,7 @@ process.on("unhandledRejection", (reason, promise) => {
 const NETWORK_NOISE_CODES = new Set(["ECONNREFUSED", "ETIMEDOUT", "ECONNRESET", "EHOSTUNREACH", "ENOTFOUND"]);
 process.on("uncaughtException", (err) => {
   if (err && err.code && NETWORK_NOISE_CODES.has(err.code)) {
-    // expected when a proxied upstream isn't running; do not log
+    // expected when a proxied upstream isnt running; do not log
     return;
   }
   console.error("[main] uncaughtException:", err && err.stack || err);
