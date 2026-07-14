@@ -4,6 +4,9 @@
   "description": "Password-protected webapp with xterm terminal, host manager, and embedded proxy with server-side adblock.",
   "main": "index.js",
   "type": "module",
+  "workspaces": [
+    "cproxy"
+  ],
   "scripts": {
     "start": "node .",
     "dev": "node --watch .",
