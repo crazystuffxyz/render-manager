@@ -1,0 +1,9 @@
+ services:
+  - type: web
+    name: command-prompt
+    env: node
+    plan: free
+    # Single-port deploy: the main webapp and the embedded cproxy sidecar
+    # run in the same Node process, listening on PORT. Render injects PORT
+    # automatically; the .env file provides a default of 8080 for local dev.
+    startCommand: npm install && node index.js
