@@ -1,4 +1,5 @@
 // server/auth.js
+// server/auth.js
 // HTTP Basic Auth — the browser shows a native password prompt.
 // The user types the password (from .env) into the prompt; we verify the
 // password portion of the decoded Authorization header against process.env.PASSWORD
@@ -7,6 +8,9 @@
 // We also issue a short-lived signed WS token (/api/ws-token) that the
 // dashboard can use to authenticate WebSocket upgrades, since browsers do
 // not re-send the Authorization header on WS handshakes.
+//
+// An "auth" cookie fallback is also present for environments lacking
+// HTTP Basic Auth header persistence (e.g. Service Workers, IFrames).
 
 import crypto from "node:crypto";
 import fs from "node:fs";
@@ -62,6 +66,20 @@ function parseBasicAuth(header) {
   }
 }
 
+function parseAuthCookie(header) {
+  if (!header || typeof header !== "string") return null;
+  const match = header.match(/(?:^|;\s*)auth=([^;]+)/);
+  if (!match) return null;
+  try {
+    const decoded = Buffer.from(match[1], "base64").toString("utf8");
+    const idx = decoded.indexOf(":");
+    if (idx === -1) return null;
+    return { user: decoded.slice(0, idx), pass: decoded.slice(idx + 1) };
+  } catch {
+    return null;
+  }
+}
+
 function buildAuthMiddleware({ publicPaths = new Set() } = {}) {
   return function authMiddleware(req, res, next) {
     const url = (req.url || "").split("?")[0];
@@ -71,7 +89,11 @@ function buildAuthMiddleware({ publicPaths = new Set() } = {}) {
     // fills in "letmein" by default, so this is only true in tests.
     if (!process.env.PASSWORD) return next();
 
-    const creds = parseBasicAuth(req.headers.authorization);
+    let creds = parseBasicAuth(req.headers.authorization);
+    if (!creds) {
+      creds = parseAuthCookie(req.headers.cookie);
+    }
+    
     if (creds && checkPassword(creds.pass)) {
       req.user = { name: creds.user || "user" };
       return next();
