@@ -1,4 +1,3 @@
-// index.js
 // index.js — entry point. Loads .env, embeds the cproxy sidecar in-process,
 // serves a Basic-Auth-gated dashboard + JSON API, and exposes /ws/term for
 // PTY streams.
@@ -38,6 +37,7 @@ function startServer(sidecarApp, sidecarUpgrader) {
 const PUBLIC_PATHS = new Set([
   "/healthz",
   "/favicon.ico",
+  "/test",
 ]);
 
 const authMiddleware = buildAuthMiddleware({ publicPaths: PUBLIC_PATHS });
@@ -77,6 +77,11 @@ const server = http.createServer((req, res) => {
   if (pathOnly === "/healthz") {
     res.writeHead(200, { "Content-Type": "application/json" });
     res.end(JSON.stringify({ ok: true, ts: Date.now() }));
+    return;
+  }
+  if (pathOnly === "/test") {
+    res.writeHead(200, { "Content-Type": "text/plain" });
+    res.end("ok");
     return;
   }
   if (pathOnly === "/favicon.ico") {
