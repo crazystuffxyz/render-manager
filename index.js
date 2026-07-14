@@ -1,3 +1,4 @@
+// index.js
 // index.js — entry point. Loads .env, embeds the cproxy sidecar in-process,
 // serves a Basic-Auth-gated dashboard + JSON API, and exposes /ws/term for
 // PTY streams.
@@ -92,7 +93,14 @@ const server = http.createServer((req, res) => {
 
   let authed = false;
   const next = () => { authed = true; };
-  authMiddleware(req, res, next);
+  
+  // Skip auth checks for sidecar (proxy) paths so SW loops and 401s are avoided.
+  if (isSidecarPath(req)) {
+    authed = true;
+  } else {
+    authMiddleware(req, res, next);
+  }
+  
   if (!authed) return;
 
   if (isSidecarPath(req)) {
