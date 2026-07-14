@@ -1,10 +1,9 @@
-// cproxy/adblock.js
 'use strict';
 
 import { FilterStore } from './adblock/filterStore.js';
 import { createIsAllowed } from './adblock/urlMatcher.js';
 import { buildCss } from './adblock/cssBuilder.js';
-import { createCleanHTML } from './adblock/cleanHtml.js';
+import { createCleanHTML } from './adblock/cleanHTML.js';
 
 const store = new FilterStore();
 
@@ -162,7 +161,7 @@ function getStats() {
   return {
     blockedDomainCount: blockedDomains.length,
     exceptionDomainCount: exceptionDomains.length,
-    globalCssSelectorCount: globalCssSelectors.length,
+    globalCssSelectorsCount: globalCssSelectors.length,
     domainsWithSpecificCssCount: Object.keys(domainSpecificCss).length,
     generatedAt,
   };
