@@ -141,7 +141,7 @@ function transformBody(bodyStr, url, req) {
 
     const baseTag =
       `<base href="${url}">` +
-      `<script src="${req.protocol}://${req.get("host")}/middleware.js?__cpo=1" __cpp="1"></script>` +
+      `<script src="${process.env.PROTOCOL || req.protocol}://${req.get("host")}/middleware.js?__cpo=1" __cpp="1"></script>` +
       (cosmeticCss ? `<style>${cosmeticCss}</style>` : "");
 
     if (/<head>/i.test(bodyStr)) {
