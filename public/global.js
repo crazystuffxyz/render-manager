@@ -1,15 +1,17 @@
+// public/global.js
 function getCookie(name) {
   const value = `; ${document.cookie}`;
   const parts = value.split(`; ${name}=`);
   if (parts.length === 2) return parts.pop().split(';').shift();
 }
 
-(async () => {
+window.clearProxyCacheAndReload = async () => {
   let changed = false;
   if(getCookie("shouldProxy") == "true"){
       document.cookie = "shouldProxy=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;";
-      location.reload();
+      changed = true;
   }
+  
   // Unregister all service workers
   if ('serviceWorker' in navigator) {
     const regs = await navigator.serviceWorker.getRegistrations();
@@ -34,7 +36,8 @@ function getCookie(name) {
       changed = true;
     }
   }
+  
   if (changed) {
     location.reload(true);
   }
-})();
+};
