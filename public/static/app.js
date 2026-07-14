@@ -1,4 +1,5 @@
 // public/static/app.js
+// public/static/app.js
 // Dashboard logic. Talks to /api/* and /ws/term. Renders xterm.js for shells.
 // Auth: HTTP Basic Auth. Browser caches the credential after the first
 // successful prompt, so all fetches re-send it automatically. WebSocket
@@ -115,7 +116,7 @@ const terminalUI = (() => {
   const termTabsEl = $("#termTabs");
   const termHostEl = $("#termHost");
   const empty = $("#termEmpty");
-  const tabs = new Map(); // id -> { label, term, fit, ws, dead, exitInfo, pid }
+  const tabs = new Map(); // id -> { label, term, wrapper, fit, ws, dead, exitInfo, pid }
   let active = null;
 
   function refit() {
@@ -128,16 +129,20 @@ const terminalUI = (() => {
     if (!termTabsEl) return;
     termTabsEl.innerHTML = "";
     if (tabs.size === 0) {
-      if (empty) empty.style.display = "";
+      if (empty) empty.style.display = "flex";
       return;
     }
-    if (empty) empty.style.display = "none";
     for (const [id, t] of tabs) {
       const el = document.createElement("div");
       el.className = "term-tab" + (id === active ? " active" : "");
       el.innerHTML = `<span>${escapeHtml(t.label)}</span><span class="pid">pid ${t.pid || "?"}</span><span class="x" title="Kill process">×</span>`;
-      el.querySelector("span:first-child").addEventListener("click", () => activate(id));
-      el.querySelector(".x").addEventListener("click", (e) => { e.stopPropagation(); killShell(id); });
+      
+      // Bind click to the whole tab element instead of just the inner span
+      el.addEventListener("click", () => activate(id));
+      el.querySelector(".x").addEventListener("click", (e) => { 
+        e.stopPropagation(); 
+        killShellUI(id); 
+      });
       termTabsEl.appendChild(el);
     }
   }
@@ -145,21 +150,25 @@ const terminalUI = (() => {
   function activate(id) {
     active = id;
     if (!termHostEl) return;
-    renderTabs();
     
-    // Clear out everything except the #termEmpty div
-    Array.from(termHostEl.children).forEach(c => {
-      if (c.id !== "termEmpty") c.remove();
-    });
+    if (empty) empty.style.display = "none";
+
+    for (const [tid, t] of tabs) {
+      if (t.wrapper) {
+        t.wrapper.style.display = (tid === id) ? "block" : "none";
+      }
+    }
+
+    renderTabs();
 
     const t = tabs.get(id);
     if (t && t.term) {
-      if (!t.term.element) {
-        t.term.open(termHostEl);
-      } else {
-        termHostEl.appendChild(t.term.element);
-      }
-      requestAnimationFrame(() => { try { t.fit.fit(); } catch {} });
+      requestAnimationFrame(() => { 
+        try { 
+          t.fit.fit(); 
+          t.term.focus(); 
+        } catch {} 
+      });
     }
   }
 
@@ -179,6 +188,17 @@ const terminalUI = (() => {
 
     entry.term = term;
     entry.fit = fit;
+    
+    const wrapper = document.createElement("div");
+    wrapper.className = "term-wrapper";
+    wrapper.style.height = "100%";
+    wrapper.style.width = "100%";
+    wrapper.style.display = "none";
+    wrapper.style.overflow = "hidden";
+    termHostEl.appendChild(wrapper);
+    entry.wrapper = wrapper;
+    
+    term.open(wrapper);
 
     term.onData((data) => {
       if (entry.dead) return;
@@ -206,10 +226,14 @@ const terminalUI = (() => {
               const oldId = entry.id;
               entry.id = msg.id;
               entry.platform = msg.platform;
+              entry.pid = msg.pid;
               tabs.delete(oldId);
               tabs.set(msg.id, entry);
               if (active === oldId) activate(msg.id);
               else renderTabs();
+            } else if (!entry.pid && msg.pid) {
+              entry.pid = msg.pid;
+              renderTabs();
             }
             return;
           }
@@ -233,7 +257,7 @@ const terminalUI = (() => {
     // Enforce __cpo=1 on WSS upgrades to escape proxy interception
     const ws = new WebSocket(`${location.protocol === "https:" ? "wss:" : "ws:"}//${location.host}/ws/term?t=${encodeURIComponent(token)}&__cpo=1`);
     const idPlaceholder = "pending-" + Math.random().toString(36).slice(2, 8);
-    const entry = { label: "shell " + (tabs.size + 1), term: null, fit: null, ws, dead: false, pid: null, id: idPlaceholder };
+    const entry = { label: "shell " + (tabs.size + 1), term: null, wrapper: null, fit: null, ws, dead: false, pid: null, id: idPlaceholder };
     tabs.set(idPlaceholder, entry);
 
     ws.addEventListener("open", () => setupTerm(entry, ws));
@@ -250,7 +274,7 @@ const terminalUI = (() => {
       try { token = await getWsToken(); } catch (e) { continue; }
       
       const ws = new WebSocket(`${location.protocol === "https:" ? "wss:" : "ws:"}//${location.host}/ws/term/${s.id}?t=${encodeURIComponent(token)}&__cpo=1`);
-      const entry = { id: s.id, label: s.label, term: null, fit: null, ws, dead: false, pid: s.pid };
+      const entry = { id: s.id, label: s.label, term: null, wrapper: null, fit: null, ws, dead: false, pid: s.pid };
       tabs.set(s.id, entry);
       
       ws.addEventListener("open", () => {
@@ -269,6 +293,28 @@ const terminalUI = (() => {
     if (!t) return;
     if (t.ws && t.ws.readyState === WebSocket.OPEN) {
       try { t.ws.send(JSON.stringify({ type: "kill", signal: "SIGTERM" })); } catch {}
+    }
+  }
+  
+  function killShellUI(id) {
+    killShell(id);
+    const t = tabs.get(id);
+    if (t) {
+      if (t.wrapper) t.wrapper.remove();
+      if (t.term) t.term.dispose();
+      tabs.delete(id);
+    }
+    if (active === id) {
+      const keys = Array.from(tabs.keys());
+      if (keys.length > 0) {
+        activate(keys[keys.length - 1]);
+      } else {
+        active = null;
+        if (empty) empty.style.display = "flex";
+        renderTabs();
+      }
+    } else {
+      renderTabs();
     }
   }
 
