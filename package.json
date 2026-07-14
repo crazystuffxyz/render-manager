@@ -2,6 +2,7 @@
   "name": "remote-shell",
   "version": "1.0.0",
   "description": "Password-protected webapp with xterm terminal, host manager, and embedded proxy with server-side adblock.",
+  "private": true,
   "main": "index.js",
   "type": "module",
   "workspaces": [
